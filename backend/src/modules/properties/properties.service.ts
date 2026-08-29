@@ -301,6 +301,9 @@ export class PropertiesService {
       );
     }
 
+    // Perform fraud check before allowing listing to be published
+    await this.fraudHooksService.checkListingBeforePublishing(id);
+
     property.status = ListingStatus.PUBLISHED;
     const saved = await this.propertyRepository.save(property);
     await this.cacheService.invalidatePropertyDomainCaches(id);
