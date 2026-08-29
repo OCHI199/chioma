@@ -17,6 +17,7 @@ import { RecordPaymentDto } from './dto/record-payment.dto';
 import { TerminateAgreementDto } from './dto/terminate-agreement.dto';
 import { QueryAgreementsDto } from './dto/query-agreements.dto';
 import { RenewAgreementDto } from './dto/renew-agreement.dto';
+import { SignAgreementDto } from './dto/sign-agreement.dto';
 import { AuditService } from '../audit/audit.service';
 import { ReviewPromptService } from '../reviews/review-prompt.service';
 import { ChiomaContractService } from '../stellar/services/chioma-contract.service';
@@ -245,6 +246,36 @@ export class AgreementsService {
         ),
       );
     }
+
+    return saved;
+  }
+
+  @Locked({ key: (id: string) => `agreement:sign:${id}`, ttlMs: 10000 })
+  @Idempotent({
+    ttlMs: 604_800_000,
+    key: (id: string, dto: SignAgreementDto) =>
+      dto?.idempotencyKey ? `agreement:sign:${id}:${dto.idempotencyKey}` : null,
+    requireKey: false,
+  })
+  async sign(id: string, _dto: SignAgreementDto) {
+    const agreement = await this.findOne(id);
+    const oldStatus = agreement.status;
+    this.stateService.validateTransition(
+      agreement.status,
+      AgreementStatus.SIGNED,
+    );
+    agreement.status = AgreementStatus.SIGNED;
+    const saved = await this.agreementRepository.save(agreement);
+
+    this.eventEmitter.emit(
+      'agreement.status.changed',
+      new AgreementStatusChangedEvent(
+        id,
+        oldStatus,
+        AgreementStatus.SIGNED,
+        'Agreement signed',
+      ),
+    );
 
     return saved;
   }
